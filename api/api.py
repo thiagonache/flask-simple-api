@@ -1,16 +1,10 @@
 import flask
 from flask import request, jsonify
 import psycopg2
+import os
 
 app = flask.Flask(__name__)
 app.config["DEBUG"] = True
-
-
-def dict_factory(cursor, row):
-    d = {}
-    for idx, col in enumerate(cursor.description):
-        d[col[0]] = row[idx]
-    return d
 
 
 @app.route('/', methods=['GET'])
@@ -41,30 +35,35 @@ def api_new():
 
     query = "INSERT INTO books VALUES(NULL,%s,'%s','%s','%s')" % (
         published, author, title, sentence)
-    print(query)
-    records = write_db(query)
-    print(records)
+    write_db(query)
     return '{"published": "%s", "author": "%s", "sentence": "%s"}' % (published, author, sentence)
 
 
-def read_db():
+def connect_db():
     try:
-        connection = psycopg2.connect(user="postgres",
-                                      password="mysecretpassword",
-                                      host="127.0.0.1",
-                                      port="5432",
-                                      database="books")
+        connection = psycopg2.connect(user=os.getenv("DB_USER", "postgres"),
+                                      password=os.getenv(
+                                          "DB_PASS", "postgres"),
+                                      host=os.getenv("DB_HOST", "127.0.0.1"),
+                                      port=os.getenv("DB_PORT", 5432),
+                                      database=os.getenv("DB_SCHEMA", "books"))
+    except (Exception, psycopg2.Error) as error:
+        raise(Exception("Error while connecting to PostgreSQL", error))
 
-        cursor = connection.cursor()
-        # Print PostgreSQL Connection properties
-        print(connection.get_dsn_parameters(), "\n")
+    return connection
 
-        # Print PostgreSQL version
+
+def read_db():
+    connection = connect_db()
+    cursor = connection.cursor()
+    # Print PostgreSQL Connection properties
+    print(connection.get_dsn_parameters(), "\n")
+
+    try:
         cursor.execute("SELECT * FROM books;")
         records = cursor.fetchall()
-
     except (Exception, psycopg2.Error) as error:
-        print("Error while connecting to PostgreSQL", error)
+        print("Error while reading database data", error)
     finally:
         # closing database connection.
         if(connection):
@@ -75,24 +74,16 @@ def read_db():
 
 
 def write_db(query):
+    connection = connect_db()
+    cursor = connection.cursor()
+    # Print PostgreSQL Connection properties
+    print(connection.get_dsn_parameters(), "\n")
 
     try:
-        connection = psycopg2.connect(user="postgres",
-                                      password="mysecretpassword",
-                                      host="127.0.0.1",
-                                      port="5432",
-                                      database="books")
-
-        cursor = connection.cursor()
-        # Print PostgreSQL Connection properties
-        print(connection.get_dsn_parameters(), "\n")
-
-        # Print PostgreSQL version
         cursor.execute(query)
         connection.commit()
-
     except (Exception, psycopg2.Error) as error:
-        print("Error while connecting to PostgreSQL", error)
+        print("Error to insert data on PostgreSQL", error)
     finally:
         # closing database connection.
         if(connection):
